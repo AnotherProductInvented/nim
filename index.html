@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Nim Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* Global Reset */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #fff;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    /* Logo styling */
+    #logo {
+      position: fixed;
+      right: 10px;
+      bottom: 10px;
+      width: 80px;
+      z-index: 999;
+    }
+    h1 {
+      margin: 1rem 0 0.5rem;
+      text-align: center;
+      line-height: 1.2;
+    }
+    /* Game Container */
+    #gameContainer {
+      position: relative;
+      width: 100%;
+      max-width: 500px;
+      height: 500px;
+      margin-bottom: 10px;
+      border: 2px solid #555;
+      background: #eee;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+    /* Overlay Screens */
+    .overlayScreen {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255,255,255,0.95);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+      z-index: 10;
+    }
+    /* Buttons */
+    button {
+      font-size: 18px;
+      padding: 10px 20px;
+      margin: 5px;
+      cursor: pointer;
+    }
+    /* Difficulty & Turn Order Container */
+    #difficultySideContainer {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 10px;
+    }
+    #difficultyContainer, #sideContainer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    /* Move History & Turn Indicator Area */
+    #moveArea {
+      display: flex;
+      width: 100%;
+      max-width: 500px;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    #turnIndicator {
+      font-size: 18px;
+      margin-left: 10px;
+    }
+    #pastMoves {
+      width: 180px;
+      border: 1px solid #444;
+      background: #fafafa;
+      padding: 5px;
+      overflow-y: auto;
+      height: 120px;
+    }
+    #pastMoves ul { margin: 0; padding: 0; list-style: none; }
+    #pastMoves li { margin: 2px 0; font-size: 14px; }
+    /* Message Area */
+    #messageArea {
+      color: red;
+      font-weight: bold;
+      margin: 10px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Logo and Title -->
+  <img src="logo.png" alt="Logo" id="logo">
+  <h1>Nim Game</h1>
+  
+  <!-- Game Container -->
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="500" height="500"></canvas>
+    
+    <!-- Overlay Screens -->
+    <div id="menuScreen" class="overlayScreen" style="display: flex;">
+      <button id="newGameBtn">New Game</button>
+      <button id="instructionsBtn">Instructions</button>
+    </div>
+    <div id="instructionsScreen" class="overlayScreen">
+      <h2>Instructions</h2>
+      <p>There are three heaps with tokens.</p>
+      <p>On your turn, click a heap and input the number of tokens to remove.</p>
+      <p>You must remove at least one token, but not more than what the heap contains.</p>
+      <p>The player who removes the last token wins.</p>
+      <p>Press [M] to return to the Main Menu.</p>
+    </div>
+    <div id="difficultyScreen" class="overlayScreen">
+      <h2>New Game</h2>
+      <div id="difficultySideContainer">
+        <div id="difficultyContainer">
+          <p><strong>Difficulty</strong></p>
+          <button id="easyBtn">Easy</button>
+          <button id="mediumBtn">Medium</button>
+          <button id="hardBtn">Hard</button>
+        </div>
+        <div id="sideContainer">
+          <p><strong>Turn Order</strong></p>
+          <button id="humanFirstBtn">Human First</button>
+          <button id="aiFirstBtn">AI First</button>
+        </div>
+      </div>
+    </div>
+    <div id="gameOverScreen" class="overlayScreen">
+      <h2 id="gameOverText"></h2>
+      <button id="gameOverNewGameBtn">New Game</button>
+      <p>Press [M] to return to the Main Menu.</p>
+    </div>
+  </div>
+  
+  <!-- Move History and Turn Indicator -->
+  <div id="moveArea">
+    <div id="turnIndicator">Turn: </div>
+    <div id="pastMoves">
+      <ul id="movesList"></ul>
+    </div>
+  </div>
+  <div id="messageArea"></div>
+  
+  <script>
+    'use strict';
+    console.log("[DEBUG] Nim game script started");
+
+    // --- Constants & Board Setup ---
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width;
+    const H = canvas.height;
+    const HEAP_COUNT = 3;
+    const TOKEN_RADIUS = 15;
+    const HIT_TOLERANCE = 10;
+    console.log("[DEBUG] Board constants:", {W, H, HEAP_COUNT, TOKEN_RADIUS, HIT_TOLERANCE});
+
+    // --- Game State ---
+    let heaps = [3, 4, 5]; // initial heaps for Nim
+    let currentTurn = 'human'; // 'human' or 'ai'
+    let gameState = 'menu'; // 'menu', 'playing', 'gameover'
+    let difficulty = 'medium';
+    let humanStarts = true; // true if human goes first
+    let movesHistory = [];
+    console.log("[DEBUG] Game state initialized");
+
+    // --- DOM Elements ---
+    const menuScreen = document.getElementById("menuScreen");
+    const instructionsScreen = document.getElementById("instructionsScreen");
+    const difficultyScreen = document.getElementById("difficultyScreen");
+    const gameOverScreen = document.getElementById("gameOverScreen");
+    const gameOverText = document.getElementById("gameOverText");
+    const movesList = document.getElementById("movesList");
+    const turnIndicator = document.getElementById("turnIndicator");
+    const newGameBtn = document.getElementById("newGameBtn");
+    const instructionsBtn = document.getElementById("instructionsBtn");
+    const easyBtn = document.getElementById("easyBtn");
+    const mediumBtn = document.getElementById("mediumBtn");
+    const hardBtn = document.getElementById("hardBtn");
+    const humanFirstBtn = document.getElementById("humanFirstBtn");
+    const aiFirstBtn = document.getElementById("aiFirstBtn");
+    const gameOverNewGameBtn = document.getElementById("gameOverNewGameBtn");
+    const messageArea = document.getElementById("messageArea");
+    console.log("[DEBUG] DOM elements loaded");
+
+    // --- Overlay Control ---
+    function showOverlay(overlay) {
+      [menuScreen, instructionsScreen, difficultyScreen, gameOverScreen].forEach(screen => {
+        screen.style.display = "none";
+      });
+      if (overlay) overlay.style.display = "flex";
+    }
+    console.log("[DEBUG] showOverlay defined");
+
+    // --- New Game Setup ---
+    function startGame() {
+      console.log("[DEBUG] startGame called with difficulty =", difficulty, "humanStarts =", humanStarts);
+      // Reset game state
+      heaps = [3, 4, 5];
+      movesHistory = [];
+      movesList.innerHTML = "";
+      gameState = 'playing';
+      currentTurn = humanStarts ? 'human' : 'ai';
+      updateTurnIndicator();
+      addMoveToHistory(`New game started. Difficulty: ${difficulty}. ${humanStarts ? "Human goes first." : "AI goes first."}`);
+      redrawBoard();
+      if (currentTurn === 'ai') {
+        setTimeout(aiTurn, 1000);
+      }
+    }
+    console.log("[DEBUG] startGame defined");
+
+    // --- Drawing Functions ---
+    function redrawBoard() {
+      ctx.clearRect(0, 0, W, H);
+      drawHeaps();
+    }
+    function drawHeaps() {
+      const heapSpacing = W / (HEAP_COUNT + 1);
+      for (let i = 0; i < HEAP_COUNT; i++) {
+        let x = (i + 1) * heapSpacing;
+        let y = H - 20; // bottom margin
+        // Draw heap base
+        ctx.fillStyle = "#444";
+        ctx.fillRect(x - 10, 20, 20, H - 40);
+        // Draw tokens as circles stacked vertically
+        for (let j = 0; j < heaps[i]; j++) {
+          let tokenY = y - j * (TOKEN_RADIUS * 2 + 5);
+          ctx.beginPath();
+          ctx.arc(x, tokenY, TOKEN_RADIUS, 0, Math.PI * 2);
+          ctx.fillStyle = "#888";
+          ctx.fill();
+          ctx.strokeStyle = "#000";
+          ctx.stroke();
+        }
+        // Draw heap label
+        ctx.fillStyle = "#000";
+        ctx.font = "16px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("Heap " + (i + 1), x, H - 5);
+      }
+    }
+    console.log("[DEBUG] Drawing functions defined");
+
+    // --- Move History ---
+    function addMoveToHistory(msg) {
+      console.log(msg);
+      const li = document.createElement('li');
+      li.textContent = msg;
+      movesList.prepend(li);
+      movesList.scrollTop = movesList.scrollHeight;
+    }
+
+    // --- Turn Indicator ---
+    function updateTurnIndicator() {
+      turnIndicator.textContent = "Turn: " + (currentTurn === 'human' ? "Human" : "AI");
+    }
+
+    // --- Message Display ---
+    function showMessage(text) {
+      messageArea.textContent = text;
+      setTimeout(() => { messageArea.textContent = ""; }, 2000);
+    }
+
+    // --- Human Move via Canvas Click ---
+    canvas.addEventListener('mousedown', (e) => {
+      if (gameState !== 'playing' || currentTurn !== 'human') {
+        console.log("[DEBUG] Click ignored; not human turn or game not playing.");
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+      // Determine which heap was clicked based on x coordinate
+      const heapSpacing = W / (HEAP_COUNT + 1);
+      let clickedHeap = null;
+      for (let i = 0; i < HEAP_COUNT; i++) {
+        let x = (i + 1) * heapSpacing;
+        if (Math.abs(mx - x) < 30) { // within 30 pixels of the heap center
+          clickedHeap = i;
+          break;
+        }
+      }
+      if (clickedHeap === null) {
+        console.log("[DEBUG] No heap clicked.");
+        return;
+      }
+      if (heaps[clickedHeap] === 0) {
+        showMessage("Selected heap is empty.");
+        return;
+      }
+      let removeCount = parseInt(prompt("Heap " + (clickedHeap + 1) + " has " + heaps[clickedHeap] + " token(s). How many tokens do you want to remove?"), 10);
+      if (isNaN(removeCount) || removeCount < 1 || removeCount > heaps[clickedHeap]) {
+        showMessage("Invalid number of tokens.");
+        return;
+      }
+      heaps[clickedHeap] -= removeCount;
+      addMoveToHistory(`Human removed ${removeCount} token(s) from Heap ${clickedHeap + 1}.`);
+      redrawBoard();
+      if (checkGameOver()) return;
+      currentTurn = 'ai';
+      updateTurnIndicator();
+      setTimeout(aiTurn, 1000);
+    });
+    console.log("[DEBUG] Canvas mousedown event listener attached");
+
+    // --- AI Turn ---
+    function aiTurn() {
+      if (gameState !== 'playing') return;
+      addMoveToHistory("AI's turn...");
+      // Determine AI move based on difficulty
+      let move = getAIMove();
+      if (!move) {
+        addMoveToHistory("AI could not make a move.");
+        return;
+      }
+      heaps[move.heap] -= move.removeCount;
+      addMoveToHistory(`AI removed ${move.removeCount} token(s) from Heap ${move.heap + 1}.`);
+      redrawBoard();
+      if (checkGameOver()) return;
+      currentTurn = 'human';
+      updateTurnIndicator();
+    }
+    console.log("[DEBUG] aiTurn defined");
+
+    // --- AI Move Logic ---
+    function getAIMove() {
+      // Returns an object { heap: index, removeCount: number }
+      // For 'hard', use optimal nim strategy if possible
+      if (difficulty === 'hard') {
+        let nimSum = heaps.reduce((acc, val) => acc ^ val, 0);
+        if (nimSum !== 0) {
+          for (let i = 0; i < heaps.length; i++) {
+            let target = heaps[i] ^ nimSum;
+            if (target < heaps[i]) {
+              return { heap: i, removeCount: heaps[i] - target };
+            }
+          }
+        }
+        // Fallback to random if no winning move is found
+      }
+      // For 'medium', 50% chance to use optimal move, else random
+      if (difficulty === 'medium') {
+        if (Math.random() < 0.5) {
+          let nimSum = heaps.reduce((acc, val) => acc ^ val, 0);
+          if (nimSum !== 0) {
+            for (let i = 0; i < heaps.length; i++) {
+              let target = heaps[i] ^ nimSum;
+              if (target < heaps[i]) {
+                return { heap: i, removeCount: heaps[i] - target };
+              }
+            }
+          }
+        }
+      }
+      // For easy or fallback, choose a random non-empty heap and remove a random number (at least 1)
+      let nonEmptyHeaps = heaps.map((count, index) => count > 0 ? index : -1).filter(index => index !== -1);
+      if (nonEmptyHeaps.length === 0) return null;
+      let heapIndex = nonEmptyHeaps[Math.floor(Math.random() * nonEmptyHeaps.length)];
+      let removeCount = Math.floor(Math.random() * heaps[heapIndex]) + 1;
+      return { heap: heapIndex, removeCount: removeCount };
+    }
+    console.log("[DEBUG] getAIMove defined");
+
+    // --- Check Game Over ---
+    function checkGameOver() {
+      if (heaps.every(count => count === 0)) {
+        gameState = 'gameover';
+        gameOverText.textContent = currentTurn === 'human' ? "Human wins!" : "AI wins!";
+        showOverlay(gameOverScreen);
+        addMoveToHistory(`Game Over. ${currentTurn === 'human' ? "Human" : "AI"} wins!`);
+        return true;
+      }
+      return false;
+    }
+    console.log("[DEBUG] checkGameOver defined");
+
+    // --- Overlay Button Event Listeners ---
+    newGameBtn.addEventListener('click', () => {
+      showOverlay(difficultyScreen);
+    });
+    instructionsBtn.addEventListener('click', () => {
+      showOverlay(instructionsScreen);
+    });
+    easyBtn.addEventListener('click', () => { difficulty = 'easy'; });
+    mediumBtn.addEventListener('click', () => { difficulty = 'medium'; });
+    hardBtn.addEventListener('click', () => { difficulty = 'hard'; });
+    humanFirstBtn.addEventListener('click', () => {
+      humanStarts = true;
+      startGame();
+      showOverlay(null);
+    });
+    aiFirstBtn.addEventListener('click', () => {
+      humanStarts = false;
+      startGame();
+      showOverlay(null);
+    });
+    gameOverNewGameBtn.addEventListener('click', () => {
+      showOverlay(menuScreen);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 'm') {
+        showOverlay(menuScreen);
+      }
+    });
+
+    // --- Initial Setup ---
+    console.log("[DEBUG] Initial setup: showing menu and drawing board");
+    showOverlay(menuScreen);
+    redrawBoard();
+    addMoveToHistory("Press 'New Game', then choose turn order and difficulty. Click a heap to remove tokens.");
+  </script>
+</body>
+</html>
