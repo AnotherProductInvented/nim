@@ -7,25 +7,25 @@
   <style>
     /* Global Reset */
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'Comic Sans MS', cursive, sans-serif;
-      /* Use your supplied grass image for the background */
-      background: url('grass.jpg') no-repeat center center fixed;
-      background-size: cover;
-      background-color: #7ec850;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
-    }
+body {
+  font-family: 'Comic Sans MS', cursive, sans-serif;
+  background: url('grass.png') no-repeat center center fixed;
+  background-size: cover;
+  background-color: #7ec850;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+
     /* Logo in the corner */
-    #logo {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      width: 80px;
-      z-index: 1000;
-    }
+#logo {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  width: 80px;
+  z-index: 1000;
+}
     /* Header Titles */
     .header-title {
       margin-top: 50px;
@@ -124,7 +124,7 @@
   <!-- Header Titles -->
   <div class="header-title">
     <h2>Another Product Invented</h2>
-    <h1>Nim Game: 1, 3, 5, 7</h1>
+    <h1>NIM</h1>
   </div>
   <!-- Turn Indicator -->
   <div id="turnIndicator"></div>
