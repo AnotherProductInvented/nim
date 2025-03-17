@@ -9,7 +9,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Comic Sans MS', cursive, sans-serif;
-      /* Use a grassy background image if available, else fallback to a green gradient */
+      /* Use your supplied grass image for the background */
       background: url('grass.jpg') no-repeat center center fixed;
       background-size: cover;
       background-color: #7ec850;
@@ -18,24 +18,58 @@
       align-items: center;
       padding: 20px;
     }
-    h1 {
-      margin: 20px 0;
-      font-size: 2em;
+    /* Logo in the corner */
+    #logo {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      width: 80px;
+      z-index: 1000;
+    }
+    /* Header Titles */
+    .header-title {
+      margin-top: 50px;
+      text-align: center;
+    }
+    .header-title h2 {
+      font-size: 1.8em;
       color: #fff;
       text-shadow: 2px 2px 4px #000;
     }
+    .header-title h1 {
+      font-size: 2.5em;
+      color: #fff;
+      text-shadow: 2px 2px 4px #000;
+      margin-bottom: 20px;
+    }
+    /* Game Container */
     #gameContainer {
       position: relative;
       width: 500px;
       height: 500px;
+      background: #fff;
       border: 2px solid #555;
-      background: rgba(255,255,255,0.8);
       margin-bottom: 10px;
     }
     canvas {
       display: block;
       width: 100%;
       height: 100%;
+    }
+    /* Turn Indicator */
+    #turnIndicator {
+      font-size: 24px;
+      color: #fff;
+      text-shadow: 1px 1px 3px #000;
+      margin: 20px 0;
+    }
+    /* Controls */
+    #controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 20px;
     }
     button {
       font-size: 20px;
@@ -48,194 +82,330 @@
       color: #333;
       box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
     }
-    #controls {
-      display: flex;
-      gap: 20px;
+    /* Overlay Screens */
+    .overlayScreen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255,255,255,0.95);
+      display: none;
+      flex-direction: column;
       align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+      z-index: 10;
     }
-    #messageArea {
-      font-size: 18px;
-      color: #fff;
-      text-shadow: 1px 1px 2px #000;
-      margin: 10px;
-      min-height: 24px;
+    .overlayScreen.active {
+      display: flex;
+    }
+    /* Warning Message (centered over game) */
+    #warningMessage {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255,255,255,0.8);
+      padding: 20px;
+      border: 2px solid #333;
+      border-radius: 10px;
+      font-size: 20px;
+      color: #333;
+      display: none;
+      z-index: 20;
     }
   </style>
 </head>
 <body>
-  <h1>Nim Game: 1, 3, 5, 7</h1>
+  <!-- Logo in the corner -->
+  <img src="logo.png" alt="Logo" id="logo">
+  <!-- Header Titles -->
+  <div class="header-title">
+    <h2>Another Product Invented</h2>
+    <h1>Nim Game: 1, 3, 5, 7</h1>
+  </div>
+  <!-- Turn Indicator -->
+  <div id="turnIndicator"></div>
+  <!-- Game Container -->
   <div id="gameContainer">
     <canvas id="gameCanvas" width="500" height="500"></canvas>
+    <!-- Warning Message (appears in center for alerts) -->
+    <div id="warningMessage"></div>
+    <!-- Overlay Screens -->
+    <div id="menuScreen" class="overlayScreen active">
+      <h2>Menu</h2>
+      <button id="newGameBtn">New Game</button>
+      <button id="instructionsBtn">Instructions</button>
+    </div>
+    <div id="instructionsScreen" class="overlayScreen">
+      <h2>Instructions</h2>
+      <p>• Remove stones by clicking on them (only from one row per turn).</p>
+      <p>• When you’re done removing stones, click the “Done” button to end your turn.</p>
+      <p>• The AI will then take its turn.</p>
+      <p>• The player who removes the last stone wins.</p>
+      <p>Press [M] to return to the menu.</p>
+      <button id="backToMenuFromInstrBtn">Back to Menu</button>
+    </div>
+    <div id="difficultyScreen" class="overlayScreen">
+      <h2>Select Difficulty</h2>
+      <button id="easyBtn">Easy</button>
+      <button id="mediumBtn">Medium</button>
+      <button id="hardBtn">Hard</button>
+    </div>
   </div>
+  <!-- Controls -->
   <div id="controls">
     <button id="doneBtn">Done</button>
-    <button id="newGameBtn">New Game</button>
   </div>
-  <div id="messageArea"></div>
-
+  
   <script>
     'use strict';
-    console.log("[DEBUG] Nim Stones game started");
-
+    console.log("[DEBUG] Nim game with stones started");
+    
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
     const W = canvas.width;
     const H = canvas.height;
-
-    // Stone settings
-    const stoneRadius = 20;
-    const stoneSpacing = 10; // horizontal spacing between stones
-
-    // Game state: 4 rows with 1, 3, 5, and 7 stones respectively.
+    
+    // Game state: four rows with stone counts: 1, 3, 5, 7
     let rows = [1, 3, 5, 7];
-    // The active row for the human move (null if not set yet)
+    // Active row for human turn (null means none selected yet)
     let activeRow = null;
-    // Whose turn: "human", "ai", or "gameover"
+    // Turn: "human", "ai", or "gameover"
     let turn = "human";
-
-    const messageArea = document.getElementById("messageArea");
-
-    // Draw the current board
+    // Difficulty: default medium
+    let difficulty = "medium";
+    
+    // Load supplied stone image
+    const stoneImg = new Image();
+    stoneImg.src = "stone.png"; // the stone image you will supply
+    
+    // DOM elements
+    const turnIndicator = document.getElementById("turnIndicator");
+    const warningMessage = document.getElementById("warningMessage");
+    const menuScreen = document.getElementById("menuScreen");
+    const instructionsScreen = document.getElementById("instructionsScreen");
+    const difficultyScreen = document.getElementById("difficultyScreen");
+    const newGameBtn = document.getElementById("newGameBtn");
+    const instructionsBtn = document.getElementById("instructionsBtn");
+    const backToMenuFromInstrBtn = document.getElementById("backToMenuFromInstrBtn");
+    const easyBtn = document.getElementById("easyBtn");
+    const mediumBtn = document.getElementById("mediumBtn");
+    const hardBtn = document.getElementById("hardBtn");
+    const doneBtn = document.getElementById("doneBtn");
+    
+    // Update turn indicator text
+    function updateTurnIndicator() {
+      if (turn === "human") {
+        turnIndicator.textContent = "Your turn";
+      } else if (turn === "ai") {
+        turnIndicator.textContent = "AI's turn";
+      } else {
+        turnIndicator.textContent = "";
+      }
+    }
+    
+    // Draw the board with rows of stones
     function drawBoard() {
       ctx.clearRect(0, 0, W, H);
+      // White background inside the game area
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, W, H);
       const rowCount = rows.length;
-      // Compute vertical spacing so rows are evenly distributed.
       const vSpacing = H / (rowCount + 1);
       for (let i = 0; i < rowCount; i++) {
-        let stoneCount = rows[i];
-        let y = (i + 1) * vSpacing;
+        const stoneCount = rows[i];
+        const y = (i + 1) * vSpacing;
         if (stoneCount > 0) {
-          // Center the stones horizontally.
-          let totalWidth = stoneCount * (stoneRadius * 2) + (stoneCount - 1) * stoneSpacing;
-          let startX = (W - totalWidth) / 2 + stoneRadius;
+          // Assume stone image (or fallback size) width of 40px
+          const stoneWidth = 40;
+          const spacing = 10;
+          const totalWidth = stoneCount * stoneWidth + (stoneCount - 1) * spacing;
+          let startX = (W - totalWidth) / 2;
           for (let j = 0; j < stoneCount; j++) {
-            let x = startX + j * ((stoneRadius * 2) + stoneSpacing);
-            ctx.beginPath();
-            ctx.arc(x, y, stoneRadius, 0, Math.PI * 2);
-            // Highlight stones in the active row if it's the human’s turn.
-            ctx.fillStyle = (turn === "human" && activeRow === i) ? "#00f" : "#fff";
-            ctx.fill();
-            ctx.strokeStyle = "#000";
-            ctx.stroke();
+            let x = startX + j * (stoneWidth + spacing);
+            if (stoneImg.complete) {
+              ctx.drawImage(stoneImg, x, y - stoneWidth/2, stoneWidth, stoneWidth);
+            } else {
+              // Fallback: draw a circle if the image isn't loaded
+              ctx.beginPath();
+              ctx.arc(x + stoneWidth/2, y, stoneWidth/2, 0, Math.PI * 2);
+              ctx.fillStyle = "#ccc";
+              ctx.fill();
+              ctx.strokeStyle = "#000";
+              ctx.stroke();
+            }
           }
         }
       }
     }
-
-    // Utility: show temporary messages
-    function showMessage(msg) {
-      messageArea.textContent = msg;
-      setTimeout(() => { messageArea.textContent = ""; }, 2000);
+    
+    // Show a warning or info message in the center of the game container
+    function showWarning(msg) {
+      warningMessage.textContent = msg;
+      warningMessage.style.display = "block";
+      setTimeout(() => {
+        warningMessage.style.display = "none";
+      }, 2000);
     }
-
-    // Determine which row was clicked and remove one stone if allowed.
+    
+    // Check if the game is over (all rows are empty)
+    function isGameOver() {
+      return rows.every(count => count === 0);
+    }
+    
+    // Handle human clicks on the canvas (remove stones)
     canvas.addEventListener("click", function(e) {
       if (turn !== "human") return;
       const rect = canvas.getBoundingClientRect();
       const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
       const my = (e.clientY - rect.top) * (canvas.height / rect.height);
-
       const rowCount = rows.length;
       const vSpacing = H / (rowCount + 1);
       let clickedRow = null;
-      // Find the row whose center is near the click.
       for (let i = 0; i < rowCount; i++) {
-        let y = (i + 1) * vSpacing;
-        if (Math.abs(my - y) <= stoneRadius + 10) {
+        const y = (i + 1) * vSpacing;
+        if (Math.abs(my - y) <= 30) {
           clickedRow = i;
           break;
         }
       }
       if (clickedRow === null) return;
-
-      // If no row has been selected yet this turn, set it.
       if (activeRow === null) {
         activeRow = clickedRow;
       } else if (activeRow !== clickedRow) {
-        showMessage("Remove stones from only one row per move!");
+        showWarning("Remove stones from only one row per move!");
         return;
       }
-      // If the selected row has stones, remove one.
       if (rows[clickedRow] <= 0) {
-        showMessage("No stones left in that row!");
+        showWarning("No stones left in that row!");
         return;
       }
       rows[clickedRow]--;
       drawBoard();
       if (isGameOver()) {
-        showMessage("Game Over! You win!");
+        showWarning("Game Over! You win!");
         turn = "gameover";
+        updateTurnIndicator();
       }
     });
-
-    // "Done" button ends the human turn and starts the AI turn.
-    document.getElementById("doneBtn").addEventListener("click", function() {
+    
+    // "Done" button ends the human turn and triggers the AI move
+    doneBtn.addEventListener("click", function() {
       if (turn !== "human") return;
       if (activeRow === null) {
-        showMessage("You must remove at least one stone.");
+        showWarning("You must remove at least one stone.");
         return;
       }
       activeRow = null;
       turn = "ai";
-      showMessage("AI's turn...");
+      updateTurnIndicator();
       setTimeout(aiMove, 1000);
     });
-
-    // "New Game" resets the board.
-    document.getElementById("newGameBtn").addEventListener("click", function() {
-      rows = [1, 3, 5, 7];
-      activeRow = null;
-      turn = "human";
-      drawBoard();
-      showMessage("New game started. Your turn!");
-    });
-
-    // Check if game is over (all rows are empty)
-    function isGameOver() {
-      return rows.every(count => count === 0);
-    }
-
-    // AI move: uses optimal Nim strategy.
+    
+    // AI move logic with difficulty selection
     function aiMove() {
-      // Compute the nim-sum.
       let nimSum = rows.reduce((acc, num) => acc ^ num, 0);
       let moveMade = false;
-      if (nimSum !== 0) {
-        for (let i = 0; i < rows.length; i++) {
-          let target = rows[i] ^ nimSum;
-          if (target < rows[i]) {
-            let stonesToRemove = rows[i] - target;
-            rows[i] -= stonesToRemove;
-            showMessage("AI removed " + stonesToRemove + " stone(s) from row " + (i+1));
-            moveMade = true;
-            break;
+      // For hard: always optimal. For medium: 50% chance optimal; for easy: random.
+      if (difficulty === "hard" || (difficulty === "medium" && Math.random() < 0.5)) {
+        if (nimSum !== 0) {
+          for (let i = 0; i < rows.length; i++) {
+            let target = rows[i] ^ nimSum;
+            if (target < rows[i]) {
+              let stonesToRemove = rows[i] - target;
+              rows[i] -= stonesToRemove;
+              moveMade = true;
+              showWarning("AI removed " + stonesToRemove + " stone(s) from row " + (i+1));
+              break;
+            }
           }
         }
       }
       if (!moveMade) {
-        // If in a losing position, remove one stone from the first non-empty row.
+        // If no optimal move, remove 1 stone from the first non-empty row
         for (let i = 0; i < rows.length; i++) {
           if (rows[i] > 0) {
             rows[i]--;
-            showMessage("AI removed 1 stone from row " + (i+1));
             moveMade = true;
+            showWarning("AI removed 1 stone from row " + (i+1));
             break;
           }
         }
       }
       drawBoard();
       if (isGameOver()) {
-        showMessage("Game Over! AI wins!");
+        showWarning("Game Over! AI wins!");
         turn = "gameover";
+        updateTurnIndicator();
       } else {
         turn = "human";
-        showMessage("Your turn!");
+        updateTurnIndicator();
       }
     }
-
-    // Initial drawing of the board.
+    
+    // Overlay screen control
+    function showOverlay(screen) {
+      menuScreen.classList.remove("active");
+      instructionsScreen.classList.remove("active");
+      difficultyScreen.classList.remove("active");
+      if (screen) {
+        screen.classList.add("active");
+      }
+    }
+    
+    // New Game from Menu → show difficulty selection
+    newGameBtn.addEventListener("click", function() {
+      showOverlay(difficultyScreen);
+    });
+    
+    // Show Instructions overlay
+    instructionsBtn.addEventListener("click", function() {
+      showOverlay(instructionsScreen);
+    });
+    
+    // Back to Menu from Instructions
+    backToMenuFromInstrBtn.addEventListener("click", function() {
+      showOverlay(menuScreen);
+    });
+    
+    // Difficulty selection buttons
+    easyBtn.addEventListener("click", function() {
+      difficulty = "easy";
+      startNewGame();
+    });
+    mediumBtn.addEventListener("click", function() {
+      difficulty = "medium";
+      startNewGame();
+    });
+    hardBtn.addEventListener("click", function() {
+      difficulty = "hard";
+      startNewGame();
+    });
+    
+    // Start a new game: reset rows and state
+    function startNewGame() {
+      rows = [1, 3, 5, 7];
+      activeRow = null;
+      turn = "human";
+      updateTurnIndicator();
+      drawBoard();
+      showOverlay(null);
+      showWarning("New game started. Your turn!");
+    }
+    
+    // Listen for key [M] to return to menu
+    document.addEventListener("keydown", function(e) {
+      if (e.key.toLowerCase() === "m") {
+        showOverlay(menuScreen);
+      }
+    });
+    
+    // Initial setup
+    updateTurnIndicator();
     drawBoard();
-    showMessage("Your turn! Click on a stone to remove it.");
   </script>
 </body>
 </html>
